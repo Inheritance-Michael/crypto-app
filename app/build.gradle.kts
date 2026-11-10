@@ -44,6 +44,7 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.navigation.runtime.ktx)
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
@@ -58,4 +59,11 @@ dependencies {
     implementation("com.squareup.retrofit2:converter-gson:2.11.0")
     // 3. Hilt Android dependency
     implementation("com.google.dagger:hilt-android:2.51.1")
+    implementation("androidx.hilt:hilt-navigation-compose:1.4.0")
+
+    implementation("androidx.navigation3:navigation3-runtime:1.2.1")
+    implementation("androidx.navigation3:navigation3-ui:1.2.1")
+
+    // Kotlinx Serialization runtime for @Serializable routes / NavKey
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3") // Use your compatible version
 }
