@@ -29,8 +29,8 @@ This project consumes the public [CoinPaprika API](https://api.coinpaprika.com/)
 | **Dependency Injection** | Dagger Hilt | `2.60.1` |
 | **UI Framework** | Jetpack Compose & Material 3 | `2026.02.01` (BOM) |
 | **Navigation** | AndroidX Navigation 3 | `1.2.1` |
+| **Serialization** | Kotlinx Serialization Plugin & JSON | `2.2.10` / `1.6.3` |
 | **Networking** | Retrofit 2 & Gson Converter | `2.11.0` |
-| **Serialization** | Kotlinx Serialization | `1.6.3` |
 
 ---
 
@@ -64,55 +64,52 @@ app/src/main/java/com/example/cryptoapp/
 
 ## 🐞 Bug Tracker & In-Depth Post-Mortem
 
-### The Runtime Exception
+### Issue 1: Hilt `IllegalStateException` on `MainActivity`
 ```text
 java.lang.IllegalStateException: Given component holder class com.example.cryptoapp.MainActivity 
 does not implement interface dagger.hilt.internal.GeneratedComponent or interface dagger.hilt.internal.GeneratedComponentManager
-    at dagger.hilt.EntryPoints.get(EntryPoints.java:62)
-    at dagger.hilt.android.internal.lifecycle.HiltViewModelFactory.createInternal(HiltViewModelFactory.java:207)
-    at androidx.hilt.lifecycle.viewmodel.compose.HiltViewModelKt.rememberHiltViewModelFactory(HiltViewModel.kt:99)
-    at com.example.cryptoapp.AppNavigationKt.AppNavigation(AppNavigation.kt:32)
 ```
+- **Root Cause:** In Jetpack Compose, `hiltViewModel()` locates the host Activity and asserts that it implements `GeneratedComponentManager`.
+- **The "Silent Compiler" Trap:** Simply annotating `MainActivity` with `@AndroidEntryPoint` is not enough if the **Hilt Gradle Plugin** (`id("com.google.dagger.hilt.android")`) and the **Hilt KSP compiler** (`ksp("com.google.dagger:hilt-compiler:...")`) are missing. Without them, no code generation or ASM bytecode transformation runs, leaving `MainActivity` as a plain `ComponentActivity`.
+- **Resolution:**
+  - Upgraded to Hilt `2.60.1` and KSP `2.2.10-2.0.2` compatible with AGP `9.3.3`.
+  - Added compatibility options in `gradle.properties`:
+    ```properties
+    android.newDsl=false
+    android.disallowKotlinSourceSets=false
+    android.sync.suppressAgpWarnings=UNSUPPORTED_PROJECT_OPTION_USE
+    ```
+  - Created `CoinApplication` with `@HiltAndroidApp` and registered it in `AndroidManifest.xml`.
 
-### The Root Cause: Why adding `@AndroidEntryPoint` alone wasn't enough!
-Many developers assume that simply adding `@AndroidEntryPoint` to `MainActivity.kt` fixes this error. However, if the app still crashes with the exact same error, it is because **the Hilt Gradle Plugin and KSP annotation processor were never configured in the Gradle build files**.
+---
 
-Without the **Hilt Gradle Plugin** (`id("com.google.dagger.hilt.android")`) and the **Hilt compiler** (`ksp("com.google.dagger:hilt-compiler:...")`):
-1. Kotlin compiles `@AndroidEntryPoint` without errors, but **no code generation occurs**.
-2. `Hilt_MainActivity.java` is never created.
-3. Hilt's Bytecode Transformation task (`:app:transformDebugClassesWithAsm`) never runs to modify `MainActivity` to implement `GeneratedComponentManager`.
-4. At runtime, `hiltViewModel()` checks whether `MainActivity` implements `GeneratedComponentManager`, finds that it does not, and crashes.
-
-### The Complete Resolution
-1. **Apply Hilt & KSP Plugins in Root `build.gradle.kts`:**
-   ```kotlin
-   plugins {
-       id("com.google.dagger.hilt.android") version "2.60.1" apply false
-       id("com.google.devtools.ksp") version "2.2.10-2.0.2" apply false
-   }
-   ```
-2. **Apply Plugins & Compiler in `app/build.gradle.kts`:**
-   ```kotlin
-   plugins {
-       id("com.google.dagger.hilt.android")
-       id("com.google.devtools.ksp")
-   }
-   dependencies {
-       implementation("com.google.dagger:hilt-android:2.60.1")
-       ksp("com.google.dagger:hilt-compiler:2.60.1")
-       implementation("androidx.hilt:hilt-navigation-compose:1.4.0")
-   }
-   ```
-3. **Configure AGP 9 Compatibility in `gradle.properties`:**
-   ```properties
-   android.newDsl=false
-   android.disallowKotlinSourceSets=false
-   android.sync.suppressAgpWarnings=UNSUPPORTED_PROJECT_OPTION_USE
-   ```
-4. **Annotate Components:**
-   - `MainActivity`: `@AndroidEntryPoint`
-   - `CoinApplication`: `@HiltAndroidApp`
-   - ViewModels: `@HiltViewModel` and `@Inject constructor`
+### Issue 2: `SerializationException: Serializer for class 'CoinListScreen' is not found`
+```text
+kotlinx.serialization.SerializationException: Serializer for class 'CoinListScreen' is not found.
+Please ensure that class is marked as '@Serializable' and that the serialization compiler plugin is applied.
+    at androidx.navigation3.runtime.serialization.NavKeySerializer.serialize(NavKeySerializer.android.kt:93)
+    at androidx.navigation3.runtime.serialization.NavBackStackSerializer.serialize(NavBackStackSerializer.kt:55)
+```
+- **Root Cause:** AndroidX Navigation 3 saves and restores the navigation backstack (`rememberNavBackStack`) using `kotlinx.serialization`. While `Screen.kt` had `@Serializable` annotations, the **Kotlin Serialization Compiler Plugin** (`org.jetbrains.kotlin.plugin.serialization`) was not applied to the project.
+- **The Trap:** Similar to Hilt, `@Serializable` requires the compiler plugin to generate the `$serializer` companion objects and serialization metadata. Without the plugin, `@Serializable` is a no-op marker.
+- **Resolution:**
+  - Registered plugin in `gradle/libs.versions.toml`:
+    ```toml
+    [plugins]
+    kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
+    ```
+  - Declared in root `build.gradle.kts`:
+    ```kotlin
+    plugins {
+        alias(libs.plugins.kotlin.serialization) apply false
+    }
+    ```
+  - Applied in `app/build.gradle.kts`:
+    ```kotlin
+    plugins {
+        alias(libs.plugins.kotlin.serialization)
+    }
+    ```
 
 ---
 
@@ -131,6 +128,12 @@ Without the **Hilt Gradle Plugin** (`id("com.google.dagger.hilt.android")`) and 
    ```
 2. Open the project in Android Studio.
 3. Sync Gradle and press **Run 'app'** (`Shift + F10`).
+
+---
+
+## 📄 Documentation
+For the complete technical breakdown and architectural analysis, see the generated report:
+📄 **[CryptoApp_Crash_Documentation.pdf](CryptoApp_Crash_Documentation.pdf)**
 
 ---
 
