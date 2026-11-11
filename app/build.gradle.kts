@@ -1,6 +1,8 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+    id("com.google.dagger.hilt.android")
+    id("com.google.devtools.ksp")
 }
 
 android {
@@ -58,12 +60,13 @@ dependencies {
     // Gson Converter
     implementation("com.squareup.retrofit2:converter-gson:2.11.0")
     // 3. Hilt Android dependency
-    implementation("com.google.dagger:hilt-android:2.51.1")
+    implementation("com.google.dagger:hilt-android:2.60.1")
+    ksp("com.google.dagger:hilt-compiler:2.60.1")
     implementation("androidx.hilt:hilt-navigation-compose:1.4.0")
 
     implementation("androidx.navigation3:navigation3-runtime:1.2.1")
     implementation("androidx.navigation3:navigation3-ui:1.2.1")
 
     // Kotlinx Serialization runtime for @Serializable routes / NavKey
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3") // Use your compatible version
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
 }
